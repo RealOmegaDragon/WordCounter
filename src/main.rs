@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use std::thread;
 
 fn get_file_content(file: String) -> String {
 
@@ -18,18 +19,26 @@ fn word_count(content: String) -> usize {
 }
 
 fn main() {
-    let mut counts: HashMap<String, usize> = HashMap::new();
-
     let mut input: String = String::new();
     io::stdin().read_line(&mut input).unwrap();
 
     let files: Vec<String> = input.split(",").map(|s: &str| s.trim().to_string()).collect();
 
+    let mut handles = Vec::new();
+
     for file in files {
-        let content: String = get_file_content(file.clone());
+        let handle = thread::spawn(move || {
+            let content: String = get_file_content(file.clone());
+            let count: usize = word_count(content);
+            return (file, count);
+        });
+        handles.push(handle);
+    }
 
-        let count: usize = word_count(content);
+    let mut counts: HashMap<String, usize> = HashMap::new();
 
+    for handle in handles {
+        let (file, count) = handle.join().unwrap();
         counts.insert(file, count);
     }
 
