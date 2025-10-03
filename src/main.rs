@@ -1,7 +1,44 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+
+pub struct ThreadPool {
+    workers: Vec<thread::JoinHandle<()>>,
+    sender: mpsc::Sender<Box<dyn FnOnce() + Send + 'static>>,
+}
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+
+        let (sender, receiver) = mpsc::channel::<Box<dyn FnOnce() + Send + 'static>>();
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+
+        for _ in 0..size {
+            let r = Arc::clone(&receiver);
+            let handle = thread::spawn(move || {
+                // Worker loop
+                while let Ok(job) = r.lock().unwrap().recv() {
+                    job();
+                }
+            });
+            workers.push(handle);
+        }
+
+        return ThreadPool { workers, sender };
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.sender.send(Box::new(f)).unwrap();
+    }
+}
 
 fn get_file_content(file: String) -> String {
 
@@ -19,32 +56,30 @@ fn word_count(content: String) -> usize {
 }
 
 fn main() {
-    let mut input: String = String::new();
+    let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
+    let files: Vec<String> = input.split(",").map(|s| s.trim().to_string()).collect();
 
-    let files: Vec<String> = input.split(",").map(|s: &str| s.trim().to_string()).collect();
-
-    let mut handles = Vec::new();
+    let pool = ThreadPool::new(4); // 4 worker threads
+    let (tx, rx) = std::sync::mpsc::channel::<(String, usize)>();
 
     for file in files {
-        let handle = thread::spawn(move || {
-            let content: String = get_file_content(file.clone());
-            let count: usize = word_count(content);
-            return (file, count);
+        let tx = tx.clone();
+        pool.execute(move || {
+            let content = get_file_content(file.clone());
+            let count = word_count(content);
+            tx.send((file, count)).unwrap();
         });
-        handles.push(handle);
     }
 
-    let mut counts: HashMap<String, usize> = HashMap::new();
+    drop(tx); // close the channel so iteration ends
 
-    for handle in handles {
-        let (file, count) = handle.join().unwrap();
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for (file, count) in rx {
         counts.insert(file, count);
     }
 
-    for (file, count) in counts.iter() {
-        println!("File: {}", file);
-        println!("Word Count: {}", count);
-        println!();
+    for (file, count) in counts {
+        println!("File: {}, Word Count: {}", file, count);
     }
 }
