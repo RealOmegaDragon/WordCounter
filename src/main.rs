@@ -40,7 +40,7 @@ impl ThreadPool {
     }
 }
 
-fn get_file_content(file: String) -> String {
+fn get_file_content(file: &String) -> String {
 
     let contents: String = fs::read_to_string(file).expect("Invalid File");
 
@@ -60,14 +60,14 @@ fn main() {
     io::stdin().read_line(&mut input).unwrap();
     let files: Vec<String> = input.split(",").map(|s| s.trim().to_string()).collect();
 
-    let pool = ThreadPool::new(4); // 4 worker threads
+    let pool: ThreadPool = ThreadPool::new(4); // 4 worker threads
     let (tx, rx) = std::sync::mpsc::channel::<(String, usize)>();
 
     for file in files {
         let tx = tx.clone();
         pool.execute(move || {
-            let content = get_file_content(file.clone());
-            let count = word_count(content);
+            let content: String = get_file_content(&file);
+            let count: usize = word_count(content);
             tx.send((file, count)).unwrap();
         });
     }
