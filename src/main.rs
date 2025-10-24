@@ -60,6 +60,10 @@ fn main() {
     io::stdin().read_line(&mut input).unwrap();
     let files: Vec<String> = input.split(",").map(|s| s.trim().to_string()).collect();
 
+    if files.len() <= 0 {
+        return ;
+    }
+
     let pool: ThreadPool = ThreadPool::new(4); // 4 worker threads
     let (tx, rx) = std::sync::mpsc::channel::<(String, usize)>();
 
